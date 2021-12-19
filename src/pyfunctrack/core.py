@@ -1,9 +1,12 @@
 import functools
 import inspect
 import yaml
+import sys
 import time
 
-def _track_callabe(param, *trackers):
+from . import trackers as pyfunctrackers
+
+def _track_callabe(param, *trackers, msg_fmt=None):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -13,24 +16,26 @@ def _track_callabe(param, *trackers):
 
             tracker_kwargs = dict(
                 parameter=param,
-                function=func.__name__, return_value=ret,
-                args=args if len(args) > 0 else None,
-                kwargs=kwargs if len(kwargs) > 0 else None,
-                start_time=start_time, end_time=end_time
+                function=func, return_value=ret,
+                args=args, kwargs=kwargs,
+                start_time=start_time, end_time=end_time,
             )
+            tracker_kwargs["message"] = msg_fmt.format(**tracker_kwargs) if msg_fmt else None
 
             for _tracker in trackers:
-                _tracker(**tracker_kwargs)
+                _tracker.do(**tracker_kwargs)
 
             return ret
         return wrapper
     return decorator
 
-def configure(callable_configuration, trackers=[], is_indirect_caller=False):
+def configure(callable_configuration, trackers=[], is_indirect_call=False):
 
     _caller = inspect.getmodule(
-        inspect.stack()[1+(1 if is_indirect_caller else 0)][0]
+        inspect.stack()[1+(1 if is_indirect_call else 0)][0]
     )
+    if _caller is None:
+        _caller = sys.modules['__main__']
 
     for fn, fn_conf in callable_configuration.items():
 
@@ -49,16 +54,17 @@ def configure(callable_configuration, trackers=[], is_indirect_caller=False):
                 _ptr = _ptr.__dict__[_ref_node]
 
         fn = getattr(_ptr, ref)
-        setattr(_ptr, ref, _track_callabe(param, *trackers)(fn))
+        setattr(_ptr, ref, _track_callabe(param, *trackers, msg_fmt=msg)(fn))
 
 def enable(conf_path, trackers=[]):
     with open(conf_path, 'r') as fd:
-        configuration = yaml.safe_load(fd)
+        conf = yaml.safe_load(fd)
 
-    if "trackers" in configuration:
-        if "printer" in configuration["trackers"]:
-            trackers.append(printer)
-        if "remote" in configuration["trackers"]:
-            trackers.append(remote_factory(**configuration["trackers"]["remote"]))
+    if "trackers" in conf:
+        if "logger" in conf["trackers"]:
+            logger_kwargs=dict(
+                log_file=conf["trackers"]["logger"].get("log_file", ".tracker_log")
+            )
+            trackers.append(pyfunctrackers.logger.Logger(**logger_kwargs))
 
-    configure(configuration["functions"], trackers=trackers, is_indirect_caller=True)
+    configure(conf["functions"], trackers=trackers, is_indirect_call=True)
