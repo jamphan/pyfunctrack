@@ -31,7 +31,7 @@ def main():
     print(num_features)
 ```
 
-We can define a tracking config like:
+We can define a tracking config "tracking.yaml" like:
 
 ``` yaml
 trackers:
@@ -47,7 +47,7 @@ functions:
 And we can then run the script with:
 
 ``` bash
-python -m pyfunctrack main.py
+python -m pyfunctrack --config tracking.yaml main.py
 ```
 
 This will produce a `.my_tracker_log` file in your current directory with the output:
